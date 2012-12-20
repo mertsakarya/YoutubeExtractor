@@ -33,7 +33,6 @@ namespace YoutubeExtractor
             videoUrl = NormalizeYoutubeUrl(videoUrl);
 
             string pageSource = GetPageSource(videoUrl);
-            string videoTitle = GetVideoTitle(pageSource);
 
             string id = HttpUtility.ParseQueryString(new Uri(videoUrl).Query)["v"];
 
@@ -42,11 +41,10 @@ namespace YoutubeExtractor
             string source = GetPageSource(requestUrl);
 
 
-            try
-            {
-                IEnumerable<Uri> downloadUrls = ExtractDownloadUrls(source);
-                IEnumerable<VideoInfo> videoInfos = GetVideoInfos(downloadUrls, videoTitle);
-                return videoInfos;
+            try {
+                var videoTitle = "";
+                IEnumerable<Uri> downloadUrls = ExtractDownloadUrls(source, out videoTitle);
+                return GetVideoInfos(downloadUrls, videoTitle);
             }
 
             catch (Exception ex)
@@ -65,18 +63,22 @@ namespace YoutubeExtractor
             return null; // Will never happen, but the compiler requires it
         }
 
-        private static IEnumerable<Uri> ExtractDownloadUrls(string source)
+        private static IEnumerable<Uri> ExtractDownloadUrls(string source, out string title)
         {
             var urls = new List<Uri>();
             var list = ParseFormEncoded(source);
+            title = "";
             foreach (var kv in list) {
+                if (kv[0] == "title") title = kv[1];
                 if (kv[0] != "url_encoded_fmt_stream_map") continue;
-                var list2 = ParseFormEncoded(kv[1], ',');
+                var list2 = kv[1].Split(',');
                 foreach (var kv2 in list2) {
-                    var list3 = ParseFormEncoded(kv2[1]);
-                    string url = "";
-                    string fallbackHost = "";
-                    string sig = "";
+                    var list3 = ParseFormEncoded(kv2);
+
+                    var url = "";
+                    var fallbackHost = "";
+                    var sig = "";
+                    
                     foreach (var kv3 in list3) {
                         switch (kv3[0]) {
                             case "url":
@@ -89,10 +91,6 @@ namespace YoutubeExtractor
                                 sig = kv3[1];
                                 break;
                         }
-                        //var list4 = Divide(kv3[1].Substring(kv3[1].IndexOf('?') + 1));
-                        //foreach (var kv4 in list4) {
-                        //    sb.AppendLine("\t\t\t\t" + kv4[0] + "\t" + kv4[1]);
-                        //}
                     }
                     if (url.IndexOf("&fallback_host=", StringComparison.Ordinal) < 0)
                         url += "&fallback_host=" + HttpUtility.UrlEncode(fallbackHost);
@@ -104,41 +102,18 @@ namespace YoutubeExtractor
             return urls;
         }
 
-        private static IEnumerable<string[]> ParseFormEncoded(string qs, char split = '&')
+        private static IEnumerable<string[]> ParseFormEncoded(string qs)
         {
-            var arr = qs.Split(split);
-            var list = new List<string[]>(arr.Length);
-            foreach (var kv in arr) {
-                if (split == ',') {
-                    list.Add(new[] { "\t", kv });
-                } else {
-                    var akv = kv.Split('=');
-                    var k = HttpUtility.UrlDecode(akv[0]);
-                    var v = HttpUtility.UrlDecode(akv[1]);
-                    list.Add(new[] { k, v });
-                }
+            var parameters = qs.Split('&');
+            var list = new List<string[]>(parameters.Length);
+            foreach (var parameter in parameters) {
+                var parameterKeyValue = parameter.Split('=');
+                var key = HttpUtility.UrlDecode(parameterKeyValue[0]);
+                var value = HttpUtility.UrlDecode(parameterKeyValue[1]);
+                list.Add(new[] { key, value });
             }
             return list;
         }
-
-
-
-        //private static IEnumerable<Uri> ExtractDownloadUrls(string availableFormats)
-        //{
-        //    const string argument = "url=";
-        //    const string endOfQueryString = "&quality";
-
-        //    var urlList = Regex.Split(availableFormats, argument).ToList();
-
-        //    // Format the URL
-        //    var urls = from url in urlList
-        //               let index = url.IndexOf(endOfQueryString, StringComparison.Ordinal)
-        //               where index > 0
-        //               let finalUrl = url.Substring(0, index).Replace("&sig=", "&signature=")
-        //               select new Uri(Uri.UnescapeDataString(finalUrl));
-
-        //    return urls;
-        //}
 
         private static string GetPageSource(string videoUrl)
         {
@@ -182,36 +157,6 @@ namespace YoutubeExtractor
             }
 
             return downLoadInfos;
-        }
-
-        private static string GetVideoTitle(string pageSource)
-        {
-            string videoTitle = null;
-
-            try
-            {
-                const string videoTitlePattern = @"\<meta name=""title"" content=""(?<title>.*)""\>";
-                var videoTitleRegex = new Regex(videoTitlePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
-                Match videoTitleMatch = videoTitleRegex.Match(pageSource);
-
-                if (videoTitleMatch.Success)
-                {
-                    videoTitle = videoTitleMatch.Groups["title"].Value;
-                    videoTitle = HttpUtility.HtmlDecode(videoTitle);
-
-                    // Remove the invalid characters in file names
-                    // In Windows they are: \ / : * ? " < > |
-                    videoTitle = Regex.Replace(videoTitle, @"[:\*\?""\<\>\|]", String.Empty);
-                    videoTitle = videoTitle.Replace("\\", "-").Replace("/", "-").Trim();
-                }
-            }
-
-            catch (Exception)
-            {
-                videoTitle = null;
-            }
-
-            return videoTitle;
         }
 
         private static bool IsVideoUnavailable(string pageSource)
