@@ -51,7 +51,7 @@ namespace YoutubeExtractor
             client.DownloadProgressChanged += (sender, args) =>
             {
                 var progressArgs = new ProgressEventArgs(args.ProgressPercentage);
-
+                 
                 // Backwards compatibility
                 this.OnProgressChanged(progressArgs);
 

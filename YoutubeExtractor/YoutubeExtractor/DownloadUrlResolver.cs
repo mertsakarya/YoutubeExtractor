@@ -47,8 +47,8 @@ namespace YoutubeExtractor
             try
             {
                 IEnumerable<Uri> downloadUrls = ExtractDownloadUrls(decoded);
-
-                return GetVideoInfos(downloadUrls, videoTitle);
+                IEnumerable<VideoInfo> videoInfos = GetVideoInfos(downloadUrls, videoTitle);
+                return videoInfos;
             }
 
             catch (Exception ex)
